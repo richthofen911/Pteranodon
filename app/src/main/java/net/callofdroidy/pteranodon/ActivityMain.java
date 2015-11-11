@@ -51,20 +51,19 @@ public class ActivityMain extends AppCompatActivity {
                         case BluetoothBHTTPService.STATE_CONNECTING:
                             break;
                         case BluetoothBHTTPService.STATE_LISTEN:
+                            break;
                         case BluetoothBHTTPService.STATE_NONE:
                             break;
                     }
                     break;
                 case Constants.MESSAGE_WRITE:
-                    byte[] writeBuf = (byte[]) msg.obj;
-                    // construct a string from the buffer
-                    String writeMessage = new String(writeBuf);
+                    String dataOutbound = msg.getData().getString("Data outbound");
                     break;
                 case Constants.MESSAGE_READ:
                     byte[] readBuf = (byte[]) msg.obj;
                     // construct a string from the valid bytes in the buffer
-                    String readMessage = new String(readBuf, 0, msg.arg1);
-                    Log.e("read msg", readMessage);
+                    String dataInbound = new String(readBuf, 0, msg.arg1);
+                    Log.e("Data inbound", dataInbound);
                     break;
                 case Constants.MESSAGE_DEVICE_NAME:
                     // save the connected device's name

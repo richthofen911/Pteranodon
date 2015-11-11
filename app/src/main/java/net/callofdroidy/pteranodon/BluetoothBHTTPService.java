@@ -108,15 +108,13 @@ public class BluetoothBHTTPService {
         }
     }
 
-
-
     /**
      * Start the ConnectedThread to begin managing a Bluetooth connection
      *
      * @param socket The BluetoothSocket on which the connection was made
      * @param device The BluetoothDevice that has been connected
      */
-    public synchronized void onConnected(BluetoothSocket socket, BluetoothDevice device) {
+    public synchronized void startConnectedThread(BluetoothSocket socket, BluetoothDevice device) {
         Log.d(TAG, "onConnected");
 
         // Cancel any thread currently running a connection
@@ -124,17 +122,11 @@ public class BluetoothBHTTPService {
             mConnectedThread.cancel();
             mConnectedThread = null;
         }
-
         // Cancel the accept thread because we only want to connect to one device
         if (mAcceptThread != null) {
             mAcceptThread.cancel();
             mAcceptThread = null;
         }
-
-        // Start the thread to manage the connection and perform transmissions
-        mConnectedThread = new ConnectedThread(socket);
-        mConnectedThread.start();
-
         // Send the name of the connected device back to the UI Activity
         Message msg = mHandler.obtainMessage(Constants.MESSAGE_DEVICE_NAME);
         Bundle bundle = new Bundle();
@@ -142,7 +134,20 @@ public class BluetoothBHTTPService {
         msg.setData(bundle);
         mHandler.sendMessage(msg);
 
+        // Start the thread to manage the connection and perform transmissions
+        mConnectedThread = new ConnectedThread(socket);
+        mConnectedThread.start();
+
         setState(STATE_CONNECTED);
+    }
+
+    public synchronized void onConnected(){
+        sendData("<html>\n" +
+                "\t<body>\n" +
+                "\t\t<p>Hello</p>\n" +
+                "\t\t<p>Welcome to use Pteranodon</p>\n" +
+                "\t</body>\n" +
+                "</html>");  // send greetings to the connected device
     }
 
     /**
@@ -155,22 +160,20 @@ public class BluetoothBHTTPService {
             mConnectedThread.cancel();
             mConnectedThread = null;
         }
-
         if (mAcceptThread != null) {
             mAcceptThread.cancel();
             mAcceptThread = null;
         }
-
         setState(STATE_NONE);
     }
 
     /**
-     * Write to the ConnectThread in an unsynchronized manner
-     *
+     * Write to the ConnectedThread in an un-synchronized manner
+     * Called by sendData(String data)
      * @param out The bytes to write
      * @see ConnectedThread#write(byte[])
      */
-    public void write(byte[] out) {
+    public void writeAsync(byte[] out) {
         // Create temporary object
         ConnectedThread r;
         // Synchronize a copy of the ConnectThread
@@ -182,19 +185,16 @@ public class BluetoothBHTTPService {
         r.write(out);
     }
 
-    /**
-     * Indicate that the connection attempt failed and notify the UI Activity.
-     */
-    private void connectionFailed() {
-        // Send a failure message back to the Activity
-        Message msg = mHandler.obtainMessage(Constants.MESSAGE_TOAST);
-        Bundle bundle = new Bundle();
-        bundle.putString(Constants.TOAST, "Unable to connect device");
-        msg.setData(bundle);
-        mHandler.sendMessage(msg);
-
-        // Start the service over to restart listening mode
-        BluetoothBHTTPService.this.start();
+    public void sendData(String data){
+        if (data.length() > 0){
+            byte[] outboundData = data.getBytes();
+            writeAsync(outboundData);
+            Message msg = mHandler.obtainMessage(Constants.MESSAGE_WRITE);
+            Bundle bundle = new Bundle();
+            bundle.putString("Data outbound", data);
+            msg.setData(bundle);
+            mHandler.sendMessage(msg);
+        }
     }
 
     /**
@@ -204,17 +204,13 @@ public class BluetoothBHTTPService {
         // Send a failure message back to the Activity
         Message msg = mHandler.obtainMessage(Constants.MESSAGE_TOAST);
         Bundle bundle = new Bundle();
-        bundle.putString(Constants.TOAST, "Device connection was lost");
+        bundle.putString(Constants.TOAST, "Client connection was lost");
         msg.setData(bundle);
         mHandler.sendMessage(msg);
-
-        // Start the service over to restart listening mode
-        BluetoothBHTTPService.this.start();
     }
 
     /**
      * This thread runs while listening for incoming connections.
-     * It behaves like a server-side client.
      * It runs until a connection is accepted (or until cancelled).
      */
     private class AcceptThread extends Thread {
@@ -256,7 +252,7 @@ public class BluetoothBHTTPService {
                             case STATE_LISTEN:
                             case STATE_CONNECTING:
                                 // Situation normal. Start the connected thread.
-                                onConnected(socket, socket.getRemoteDevice());
+                                startConnectedThread(socket, socket.getRemoteDevice());
                                 break;
                             case STATE_NONE:
                             case STATE_CONNECTED:
@@ -272,7 +268,6 @@ public class BluetoothBHTTPService {
                 }
             }
             Log.i(TAG, "END mAcceptThread ");
-
         }
 
         public void cancel() {
@@ -289,7 +284,7 @@ public class BluetoothBHTTPService {
      * This thread runs during a connection with a remote device.
      * It handles all incoming and outgoing transmissions.
      */
-    private class ConnectedThread extends Thread {
+    private class ConnectedThread extends Thread{
         private final BluetoothSocket mmSocket;
         private final InputStream mmInStream;
         private final OutputStream mmOutStream;
@@ -314,9 +309,9 @@ public class BluetoothBHTTPService {
 
         public void run() {
             Log.i(TAG, "BEGIN mConnectedThread");
+            onConnected();
             byte[] buffer = new byte[1024];
             int bytes;
-
             // Keep listening to the InputStream while connected
             while (true) {
                 try {
@@ -343,7 +338,6 @@ public class BluetoothBHTTPService {
         public void write(byte[] buffer) {
             try {
                 mmOutStream.write(buffer);
-
                 // Share the sent message back to the UI Activity
                 mHandler.obtainMessage(Constants.MESSAGE_WRITE, -1, -1, buffer)
                         .sendToTarget();
@@ -363,5 +357,4 @@ public class BluetoothBHTTPService {
             }
         }
     }
-
 }
